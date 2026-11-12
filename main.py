@@ -202,26 +202,39 @@ scene.render.use_compositing = False
 # audio
 scene.sequence_editor_create(); audio=os.path.join(ROOT,'assets','voiceover.mp3')
 if os.path.exists(audio): scene.sequence_editor.strips.new_sound('Original Indonesian voice-over',audio,channel=1,frame_start=1)
-# linear camera and object motion; smooth ease
-for ob in bpy.data.objects:
-# Blender 5.0.1 compatible interpolation
-for ob in bpy.data.objects:
-    if ob.animation_data and ob.animation_data.action:
-        action = ob.animation_data.action
 
-        if hasattr(action, "fcurves"):
-            for fc in action.fcurves:
-                for key in fc.keyframe_points:
-                    key.interpolation = 'BEZIER'
-        else:
-            try:
-                for layer in action.layers:
-                    for strip in layer.strips:
-                        if hasattr(strip, "channelbag"):
-                            bag = strip.channelbag(ob)
-                            if bag:
-                                for fc in bag.fcurves:
-                                    for key in fc.keyframe_points:
-                                        key.interpolation = 'BEZIER'
-            except Exception as e:
-                print("Interpolation adjustment skipped:", e)
+# ---------- Blender 5.0.1 animation and render ----------
+# Keyframes default to BEZIER interpolation.
+# Avoid legacy Action.fcurves API because Blender 5 uses layered Actions.
+
+# Test mode: 20 frames. Full render: set RENDER_TEST_FRAMES=0.
+RENDER_TEST_FRAMES = int(os.environ.get('RENDER_TEST_FRAMES', '20'))
+
+scene.frame_start = 1
+scene.frame_end = RENDER_TEST_FRAMES if RENDER_TEST_FRAMES > 0 else 2276
+
+# Ensure output directory exists
+os.makedirs(os.path.join(ROOT, 'output', 'frames'), exist_ok=True)
+
+scene.render.filepath = os.path.join(ROOT, 'output', 'frames', 'frame_')
+
+# Save Blender project for debugging
+blend_path = os.path.join(ROOT, 'output', 'jakarta_whatif.blend')
+bpy.ops.wm.save_as_mainfile(filepath=blend_path)
+
+print("===================================")
+print("STARTING BLENDER ANIMATION RENDER")
+print("Blender version:", bpy.app.version_string)
+print("Start frame:", scene.frame_start)
+print("End frame:", scene.frame_end)
+print("Resolution:", scene.render.resolution_x, "x", scene.render.resolution_y)
+print("Render percentage:", scene.render.resolution_percentage)
+print("===================================")
+
+# Render animation to PNG sequence
+bpy.ops.render.render(animation=True)
+
+print("===================================")
+print("BLENDER RENDER COMPLETED")
+print("===================================")
+
