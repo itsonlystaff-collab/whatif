@@ -561,53 +561,56 @@ fill.data.size = 10
 aim(fill, (0, 0, 0))
 
 # =====================================================
-# BLENDER 5.0.1 COMPOSITOR
+# BLENDER 5.0.1 COMPOSITOR (NEW SOCKET API)
 # =====================================================
 
-# Blender 5.0 no longer uses scene.node_tree.
-# The compositor is now a standalone node group.
+# Blender 5.0 uses a standalone compositor node group.
+scene.render.use_compositing = True
+
+# Remove an earlier group with the same name if this script is run again.
+old_comp = bpy.data.node_groups.get("Jakarta Cinematic Compositor")
+if old_comp:
+    bpy.data.node_groups.remove(old_comp)
 
 comp_tree = bpy.data.node_groups.new(
     "Jakarta Cinematic Compositor",
     "CompositorNodeTree"
 )
-
 scene.compositing_node_group = comp_tree
 
-# Output interface
 comp_tree.interface.new_socket(
     name="Image",
     in_out='OUTPUT',
     socket_type='NodeSocketColor'
 )
 
-# Create compositor nodes
-rl = comp_tree.nodes.new('CompositorNodeRLayers')
-glare = comp_tree.nodes.new('CompositorNodeGlare')
-comp_out = comp_tree.nodes.new('NodeGroupOutput')
+rl = comp_tree.nodes.new(type='CompositorNodeRLayers')
+glare = comp_tree.nodes.new(type='CompositorNodeGlare')
+comp_out = comp_tree.nodes.new(type='NodeGroupOutput')
 
-# Configure glow
-glare.glare_type = 'FOG_GLOW'
-glare.quality = 'MEDIUM'
-glare.threshold = 1.5
+# Blender 5.0 moved Glare settings from node properties to input sockets.
+# Use the menu label for the Glare Type socket.
+type_socket = glare.inputs.get("Type")
+if type_socket is not None:
+    type_socket.default_value = 'Fog Glow'
 
-# Position nodes
+threshold_socket = glare.inputs.get("Threshold")
+if threshold_socket is not None:
+    threshold_socket.default_value = 1.5
+
+# Optional strength control; leave Blender's default if unavailable.
+strength_socket = glare.inputs.get("Strength")
+if strength_socket is not None:
+    strength_socket.default_value = 0.8
+
 rl.location = (-400, 0)
 glare.location = (-100, 0)
 comp_out.location = (200, 0)
 
-# Connect nodes
-comp_tree.links.new(
-    rl.outputs['Image'],
-    glare.inputs['Image']
-)
+comp_tree.links.new(rl.outputs["Image"], glare.inputs["Image"])
+comp_tree.links.new(glare.outputs["Image"], comp_out.inputs["Image"])
 
-comp_tree.links.new(
-    glare.outputs['Image'],
-    comp_out.inputs['Image']
-)
-
-print("Blender 5.0.1 compositor configured.")
+print("Blender 5.0.1 compositor configured with Fog Glow sockets.")
 
 # =====================================================
 # AUDIO
@@ -636,9 +639,15 @@ else:
 
 for ob in bpy.data.objects:
     if ob.animation_data and ob.animation_data.action:
-        for fc in ob.animation_data.action.fcurves:
-            for kp in fc.keyframe_points:
-                kp.interpolation = 'BEZIER'
+        try:
+            # Legacy/simple action access; Blender 5.x may use layered actions.
+            for fc in ob.animation_data.action.fcurves:
+                for kp in fc.keyframe_points:
+                    kp.interpolation = 'BEZIER'
+        except (AttributeError, TypeError):
+            # Keep the animation and let Blender use its default interpolation
+            # if the Action API does not expose legacy fcurves.
+            pass
 
 # =====================================================
 # SAVE PROJECT
