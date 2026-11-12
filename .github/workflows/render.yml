@@ -1,3 +1,4 @@
+
 name: Render Jakarta What If
 
 on:
@@ -9,20 +10,32 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: render-jakarta-whatif
+  cancel-in-progress: false
+
+env:
+  BLENDER_VERSION: "5.0.1"
+  EXPECTED_FRAMES: "2276"
+  FPS: "30"
+
 jobs:
   render:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
 
     steps:
-      # 1. Download repository
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # 2. Install dependencies
       - name: Install Blender dependencies and FFmpeg
         run: |
+          set -e
+
           sudo apt-get update
+
           sudo apt-get install -y \
             ffmpeg \
             curl \
@@ -43,19 +56,23 @@ jobs:
       # 3. Install Blender 5.0.1
       - name: Install Blender 5.0.1
         run: |
+          set -e
+
           cd /tmp
 
-          curl -fL \
+          curl -fL --retry 3 --retry-delay 5 \
             https://download.blender.org/release/Blender5.0/blender-5.0.1-linux-x64.tar.xz \
             -o blender.tar.xz
 
           tar -xf blender.tar.xz
 
-          echo "/tmp/blender-5.0.1-linux-x64" >> $GITHUB_PATH
+          echo "/tmp/blender-5.0.1-linux-x64" >> "$GITHUB_PATH"
 
-      # 4. Verify Blender and FFmpeg
-      - name: Show Blender and FFmpeg versions
+      # 4. Verify installations
+      - name: Verify Blender and FFmpeg
         run: |
+          set -e
+
           blender --version
           ffmpeg -version
           ffprobe -version
@@ -63,14 +80,16 @@ jobs:
       # 5. Check project files
       - name: Check project files
         run: |
+          set -e
+
           echo "=== PROJECT DIRECTORY ==="
           ls -lah
 
-          echo "=== ASSETS ==="
+          echo "=== ASSETS DIRECTORY ==="
           ls -lah assets/
 
-          test -f main.py || {
-            echo "ERROR: main.py tidak ditemukan"
+          test -s main.py || {
+            echo "ERROR: main.py tidak ditemukan atau kosong"
             exit 1
           }
 
@@ -81,44 +100,64 @@ jobs:
 
           mkdir -p output/frames
 
-      # 6. Render PNG with Blender
+          echo "PROJECT CHECK PASSED"
+
+      # 6. Render Blender
       - name: Render PNG frames with Blender
+        timeout-minutes: 330
+        shell: bash
         run: |
+          set -o pipefail
+
+          echo "=== START BLENDER RENDER ==="
+          echo "Blender version: $BLENDER_VERSION"
+          echo "Expected frames: $EXPECTED_FRAMES"
+
           blender \
             --background \
+            --factory-startup \
+            --threads 4 \
             --python-exit-code 1 \
-            --python main.py
+            --python main.py \
+            2>&1 | tee output/blender-render.log
 
-      # 7. Check rendered frames
+          echo "=== BLENDER RENDER FINISHED ==="
+
+      # 7. Verify all frames
       - name: Verify rendered PNG frames
+        shell: bash
         run: |
-          echo "=== CHECK FRAMES ==="
+          set -euo pipefail
 
-          find output/frames \
-            -maxdepth 1 \
-            -type f \
-            -name '*.png' \
-            | sort | head -20
+          echo "=== VERIFY PNG FRAMES ==="
 
           FRAME_COUNT=$(find output/frames \
             -maxdepth 1 \
             -type f \
             -name 'frame_*.png' | wc -l)
 
-          echo "Total frames: $FRAME_COUNT"
+          echo "Found frames: $FRAME_COUNT"
+          echo "Expected frames: $EXPECTED_FRAMES"
 
-          if [ "$FRAME_COUNT" -eq 0 ]; then
-            echo "ERROR: Tidak ada PNG frames!"
+          if [ "$FRAME_COUNT" -ne "$EXPECTED_FRAMES" ]; then
+            echo "ERROR: Jumlah frame tidak sesuai!"
             exit 1
           fi
 
-          if [ ! -f output/frames/frame_0001.png ]; then
-            echo "ERROR: frame_0001.png tidak ditemukan!"
-            exit 1
-          fi
+          for i in $(seq 1 "$EXPECTED_FRAMES"); do
+            printf -v FRAME_NAME "output/frames/frame_%04d.png" "$i"
+
+            if [ ! -s "$FRAME_NAME" ]; then
+              echo "ERROR: Frame hilang atau kosong: $FRAME_NAME"
+              exit 1
+            fi
+          done
+
+          echo "ALL FRAMES VERIFIED!"
 
       # 8. Encode MP4 and add voice-over
       - name: Encode MP4 and add voice-over
+        timeout-minutes: 30
         shell: bash
         run: |
           set -euo pipefail
@@ -131,18 +170,20 @@ jobs:
           echo "=== ENCODING MP4 ==="
 
           ffmpeg -y \
-            -framerate 30 \
+            -framerate "$FPS" \
             -start_number 1 \
             -i output/frames/frame_%04d.png \
             -i assets/voiceover.mp3 \
             -map 0:v:0 \
             -map 1:a:0 \
+            -frames:v "$EXPECTED_FRAMES" \
             -c:v libx264 \
             -preset medium \
             -crf 18 \
             -pix_fmt yuv420p \
             -c:a aac \
             -b:a 192k \
+            -af apad \
             -shortest \
             -movflags +faststart \
             output/jakarta_whatif.mp4
@@ -151,22 +192,34 @@ jobs:
 
           test -s output/jakarta_whatif.mp4
 
+          echo "=== VIDEO INFORMATION ==="
+
           ffprobe -v error \
-            -show_entries format=duration \
+            -show_entries format=duration,size \
+            -show_entries stream=codec_name,width,height,r_frame_rate \
+            -of default=noprint_wrappers=1 \
+            output/jakarta_whatif.mp4
+
+          echo "=== VERIFY AUDIO STREAM ==="
+
+          ffprobe -v error \
+            -select_streams a:0 \
+            -show_entries stream=codec_name \
             -of default=noprint_wrappers=1 \
             output/jakarta_whatif.mp4
 
           echo "MP4 BERHASIL DIBUAT!"
 
-      # 9. Upload final video and Blender project
-      - name: Upload rendered MP4 and Blender scene
+      # 9. Upload final video
+      - name: Upload final video and render log
         uses: actions/upload-artifact@v4
         with:
           name: jakarta-whatif-video
           path: |
             output/jakarta_whatif.mp4
-            output/frames/
+            output/blender-render.log
             main.py
             assets/voiceover.mp3
           if-no-files-found: error
+          compression-level: 0
           retention-days: 7
