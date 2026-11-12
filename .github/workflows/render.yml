@@ -16,8 +16,11 @@ concurrency:
 
 env:
   BLENDER_VERSION: "5.0.1"
-  EXPECTED_FRAMES: "2276"
+  EXPECTED_FRAMES: "20"
   FPS: "30"
+  RENDER_TEST_FRAMES: "20"
+  RENDER_SCALE: "50"
+  RENDER_SAMPLES: "8"
 
 jobs:
   render:
