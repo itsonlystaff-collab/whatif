@@ -13,6 +13,16 @@ jobs:
   render:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    env:
+      EXPECTED_FRAMES: "20"
+      RENDER_TEST_FRAMES: "20"
+      RENDER_SCALE: "50"
+      RENDER_SAMPLES: "8"
 
     steps:
       # 1. Download repository
