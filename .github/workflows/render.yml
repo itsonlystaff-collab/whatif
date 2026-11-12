@@ -1,257 +1,37 @@
-
 name: Render Jakarta What If
-
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-
-permissions:
-  contents: read
-
-concurrency:
-  group: render-jakarta-whatif
-  cancel-in-progress: false
-
-env:
-  BLENDER_VERSION: "5.0.1"
-  EXPECTED_FRAMES: "20"
-  FPS: "30"
-  RENDER_TEST_FRAMES: "20"
-  RENDER_SCALE: "50"
-  RENDER_SAMPLES: "8"
-
 jobs:
   render:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-
     steps:
-      # 1. Checkout repository
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # 2. Install dependencies
-      - name: Install Blender dependencies and FFmpeg
+      - uses: actions/checkout@v4
+      - name: Install Blender and FFmpeg
         run: |
-          set -e
-
           sudo apt-get update
-
-          sudo apt-get install -y \
-            ffmpeg \
-            curl \
-            xz-utils \
-            libx11-6 \
-            libxxf86vm1 \
-            libxfixes3 \
-            libxi6 \
-            libxrender1 \
-            libxkbcommon0 \
-            libsm6 \
-            libice6 \
-            libgl1 \
-            libegl1 \
-            libglib2.0-0 \
-            libgomp1
-
-      # 3. Install Blender 5.0.1
-      - name: Install Blender 5.0.1
+          sudo apt-get install -y blender ffmpeg
+      - name: Show Blender version
         run: |
-          set -e
-
-          cd /tmp
-
-          curl -fL --retry 3 --retry-delay 5 \
-            https://download.blender.org/release/Blender5.0/blender-5.0.1-linux-x64.tar.xz \
-            -o blender.tar.xz
-
-          tar -xf blender.tar.xz
-
-          echo "/tmp/blender-5.0.1-linux-x64" >> "$GITHUB_PATH"
-
-      # 4. Verify installations
-      - name: Verify Blender and FFmpeg
-        run: |
-          set -e
-
           blender --version
-          ffmpeg -version
-          ffprobe -version
-
-      # 5. Check project files
-      - name: Check project files
-        run: |
-          set -e
-
-          echo "=== PROJECT DIRECTORY ==="
-          ls -lah
-
-          echo "=== ASSETS DIRECTORY ==="
-          ls -lah assets/
-
-          test -s main.py || {
-            echo "ERROR: main.py tidak ditemukan atau kosong"
-            exit 1
-          }
-
-          test -s assets/voiceover.mp3 || {
-            echo "ERROR: voiceover.mp3 tidak ditemukan atau kosong"
-            exit 1
-          }
-
-          mkdir -p output/frames
-
-          echo "PROJECT CHECK PASSED"
-
-      # 6. Render Blender
+          ffmpeg -version | head -n 2
       - name: Render PNG frames with Blender
-        timeout-minutes: 330
-        shell: bash
-        run: |
-          set -o pipefail
-
-          echo "=== START BLENDER RENDER ==="
-          echo "Blender version: $BLENDER_VERSION"
-          echo "Expected frames: $EXPECTED_FRAMES"
-          echo "Test frames: $RENDER_TEST_FRAMES"
-          echo "Render scale: $RENDER_SCALE%"
-          echo "Render samples: $RENDER_SAMPLES"
-
-          blender \
-            --background \
-            --factory-startup \
-            --threads 4 \
-            --python-exit-code 1 \
-            --python main.py \
-            2>&1 | tee output/blender-render.log
-
-          echo "=== BLENDER RENDER FINISHED ==="
-
-      # 6A. Diagnose render output
-      - name: Diagnose Blender render output
-        if: always()
-        shell: bash
-        run: |
-          echo "=== BLENDER RENDER LOG ==="
-
-          if [ -f output/blender-render.log ]; then
-            tail -n 150 output/blender-render.log
-          else
-            echo "Blender log tidak ditemukan"
-          fi
-
-          echo "=== OUTPUT DIRECTORY ==="
-          find output -maxdepth 3 -type f \
-            -printf '%p (%s bytes)\n' | head -n 100
-
-          echo "=== FRAME DIRECTORY ==="
-          ls -lah output/frames/ || true
-
-          echo "=== PNG FRAME COUNT ==="
-          find output/frames -maxdepth 1 \
-            -type f -name 'frame_*.png' | wc -l
-
-      # 7. Verify all frames
-      - name: Verify rendered PNG frames
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "=== VERIFY PNG FRAMES ==="
-
-          FRAME_COUNT=$(find output/frames \
-            -maxdepth 1 \
-            -type f \
-            -name 'frame_*.png' | wc -l)
-
-          echo "Found frames: $FRAME_COUNT"
-          echo "Expected frames: $EXPECTED_FRAMES"
-
-          if [ "$FRAME_COUNT" -ne "$EXPECTED_FRAMES" ]; then
-            echo "ERROR: Jumlah frame tidak sesuai!"
-            exit 1
-          fi
-
-          for i in $(seq 1 "$EXPECTED_FRAMES"); do
-            printf -v FRAME_NAME "output/frames/frame_%04d.png" "$i"
-
-            if [ ! -s "$FRAME_NAME" ]; then
-              echo "ERROR: Frame hilang atau kosong: $FRAME_NAME"
-              exit 1
-            fi
-          done
-
-          echo "ALL FRAMES VERIFIED!"
-
-      # 8. Encode MP4 and add voice-over
+        run: blender -b -t 4 -P main.py
       - name: Encode MP4 and add voice-over
-        timeout-minutes: 30
-        shell: bash
         run: |
-          set -euo pipefail
-
-          echo "=== CHECK INPUT FILES ==="
-
-          test -s assets/voiceover.mp3
-          test -s output/frames/frame_0001.png
-
-          echo "=== ENCODING MP4 ==="
-
-          ffmpeg -y \
-            -framerate "$FPS" \
-            -start_number 1 \
-            -i output/frames/frame_%04d.png \
-            -i assets/voiceover.mp3 \
-            -map 0:v:0 \
-            -map 1:a:0 \
-            -frames:v "$EXPECTED_FRAMES" \
-            -c:v libx264 \
-            -preset medium \
-            -crf 18 \
-            -pix_fmt yuv420p \
-            -c:a aac \
-            -b:a 192k \
-            -af apad \
-            -shortest \
-            -movflags +faststart \
+          test -f assets/voiceover.mp3
+          test -f output/frames/frame_0001.png
+          ffmpeg -y -framerate 30 -start_number 1 -i output/frames/frame_%04d.png \
+            -i assets/voiceover.mp3 -map 0:v:0 -map 1:a:0 \
+            -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p \
+            -c:a aac -b:a 192k -shortest -movflags +faststart \
             output/jakarta_whatif.mp4
-
-          echo "=== VERIFY MP4 ==="
-
           test -s output/jakarta_whatif.mp4
-
-          echo "=== VIDEO INFORMATION ==="
-
-          ffprobe -v error \
-            -show_entries format=duration,size \
-            -show_entries stream=codec_name,width,height,r_frame_rate \
-            -of default=noprint_wrappers=1 \
-            output/jakarta_whatif.mp4
-
-          echo "=== VERIFY AUDIO STREAM ==="
-
-          ffprobe -v error \
-            -select_streams a:0 \
-            -show_entries stream=codec_name \
-            -of default=noprint_wrappers=1 \
-            output/jakarta_whatif.mp4
-
-          echo "MP4 BERHASIL DIBUAT!"
-
-      # 9. Upload video and diagnostic log
-      - name: Upload final video and render log
-        if: always()
+      - name: Upload rendered MP4 and Blender scene
         uses: actions/upload-artifact@v4
         with:
           name: jakarta-whatif-video
           path: |
             output/jakarta_whatif.mp4
-            output/blender-render.log
-            main.py
-            assets/voiceover.mp3
-          if-no-files-found: warn
-          compression-level: 0
-          retention-days: 7
-```
+            jakarta_whatif.blend
+          if-no-files-found: error
