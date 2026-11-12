@@ -193,23 +193,66 @@ for side in (-1, 1):
         arm = cube("Streetlight arm", (x-side*.65, y, 7.8), (1.4,.09,.09), metal)
         lamp = uv_sphere("Streetlight lamp", (x-side*1.25, y, 7.75), (.25,.25,.12), window_warm)
 
+
 # ---------- vehicles ----------
 def make_car(name, body_mat, y, x=-4.0, direction=1):
     parts = []
-    body = cube(name+" body", (x,y,.72), (2.0,4.1,1.05), body_mat, .18)
-    roof = cube(name+" roof", (x,y+.15,1.43), (1.65,2.0,.72), body_mat, .2)
-    windshield = cube(name+" windshield", (x,y-0.78,1.48), (1.48,.06,.52), glass, .025)
-    rear = cube(name+" rear glass", (x,y+1.08,1.48), (1.48,.06,.48), glass, .025)
-    parts += [body,roof,windshield,rear]
+
+    body = cube(
+        name+" body",
+        (x,y,.72),
+        (2.0,4.1,1.05),
+        body_mat,
+        .18
+    )
+
+    roof = cube(
+        name+" roof",
+        (x,y+.15,1.43),
+        (1.65,2.0,.72),
+        body_mat,
+        .2
+    )
+
+    windshield = cube(
+        name+" windshield",
+        (x,y-0.78,1.48),
+        (1.48,.06,.52),
+        glass,
+        .025
+    )
+
+    rear = cube(
+        name+" rear glass",
+        (x,y+1.08,1.48),
+        (1.48,.06,.48),
+        glass,
+        .025
+    )
+
+    parts += [roof, windshield, rear]
+
     for wx in (-.95,.95):
         for wy in (-1.25,1.25):
-            wheel = cylinder(name+" wheel", (x+wx,y+wy,.43), .38,.18,black,16)
+            wheel = cylinder(
+                name+" wheel",
+                (x+wx,y+wy,.43),
+                .38,
+                .18,
+                black,
+                16
+            )
+
             wheel.rotation_euler[1] = math.pi/2
             parts.append(wheel)
+
+    # Parent hanya objek tambahan, bukan body itu sendiri
     for part in parts:
         part.parent = body
         part.matrix_parent_inverse = body.matrix_world.inverted()
+
     return body
+
 
 car1 = make_car("Red sedan", red, -13, -4.3)
 car2 = make_car("Blue sedan", blue, 5, 4.4)
