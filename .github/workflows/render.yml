@@ -228,8 +228,10 @@ jobs:
 
           echo "MP4 BERHASIL DIBUAT!"
 
-      # 9. Upload final video
+    
+      # 9. Upload video and diagnostic log
       - name: Upload final video and render log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: jakarta-whatif-video
@@ -238,18 +240,9 @@ jobs:
             output/blender-render.log
             main.py
             assets/voiceover.mp3
-            
-      # 10. Always upload diagnostic logs
-      - name: Upload diagnostic logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: jakarta-whatif-diagnostics
-          path: |
-            output/blender-render.log
           if-no-files-found: warn
-          retention-days: 7
-
-          if-no-files-found: error
           compression-level: 0
           retention-days: 7
+
+            
+  
