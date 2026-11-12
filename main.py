@@ -214,7 +214,7 @@ if ob.animation_data and ob.animation_data.action:
             for key in fc.keyframe_points:
                 key.interpolation = 'BEZIER'
     else:
-        # Blender 5.0 layered Action API
+  # Blender 5.0 layered Action API
         try:
             for layer in action.layers:
                 for strip in layer.strips:
