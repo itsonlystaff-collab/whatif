@@ -205,7 +205,27 @@ if os.path.exists(audio): scene.sequence_editor.strips.new_sound('Original Indon
 # linear camera and object motion; smooth ease
 for ob in bpy.data.objects:
     if ob.animation_data and ob.animation_data.action:
-        for fc in ob.animation_data.action.fcurves:
+# Blender 5.0.1 compatible interpolation
+if ob.animation_data and ob.animation_data.action:
+    action = ob.animation_data.action
+
+    if hasattr(action, "fcurves"):
+        for fc in action.fcurves:
+            for key in fc.keyframe_points:
+                key.interpolation = 'BEZIER'
+    else:
+        # Blender 5.0 layered Action API
+        try:
+            for layer in action.layers:
+                for strip in layer.strips:
+                    if hasattr(strip, "channelbag"):
+                        bag = strip.channelbag(ob)
+                        if bag:
+                            for fc in bag.fcurves:
+                                for key in fc.keyframe_points:
+                                    key.interpolation = 'BEZIER'
+        except Exception as e:
+            print("Interpolation adjustment skipped:", e)
             for kp in fc.keyframe_points: kp.interpolation='BEZIER'
 scene.render.image_settings.color_mode='RGB'
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(ROOT,'jakarta_whatif.blend'))
