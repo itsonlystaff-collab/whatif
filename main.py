@@ -1,96 +1,105 @@
+    o = cube(name, (0, 0, 0), (1, 1, 1), material)
+    o.parent = cam
+    o.location = loc
+    o.scale = scale
+    return o
 
-import bpy
-import math
-import os
-import random
-from mathutils import Vector
 
-random.seed(41)
+panel('Top title panel', (0, 3.15, -8), (2.0, .62, .012), panelmat)
+text_obj('WHAT IF?  |  JAKARTA', 'Top label', (-1.72, 3.33, -7.98), .15, mint)
+text_obj('SEMUA NAIK', 'Headline line 1', (-1.72, 3.04, -7.98), .23, white_text)
+text_obj('TRANSPORTASI UMUM?', 'Headline line 2', (-1.72, 2.77, -7.98), .18, white_text)
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_DIR = os.path.join(ROOT, "output", "frames")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+subs = [
+    (1, 250, 'Bagaimana jika seluruh warga Jakarta\nmemilih transportasi umum?', 'KOTA BERGERAK BERSAMA'),
+    (251, 510, 'MRT, KRL, dan TransJakarta\nmenjadi pilihan utama masyarakat.', 'TRANSPORTASI PUBLIK'),
+    (511, 770, 'Kemacetan berkurang drastis.\nPolusi udara mulai menurun.', 'JALANAN LEBIH LENGANG'),
+    (771, 1020, 'Pengeluaran bahan bakar berkurang.\nWaktu menjadi lebih produktif.', 'WAKTU KEMBALI BERHARGA'),
+    (1021, 1280, 'Ruang parkir berubah menjadi taman.\nTrotoar dan jalur sepeda bertambah.', 'RUANG KOTA UNTUK MANUSIA'),
+    (1281, 1530, 'Udara terasa lebih segar.\nJakarta menjadi lebih sehat.', 'JAKARTA LEBIH HIJAU'),
+    (1531, 1780, 'Jakarta bukan lagi kota\nuntuk menghabiskan waktu dalam macet.', 'KOTA YANG BERUBAH'),
+    (1781, 2020, 'Melainkan kota tempat\norang menikmati perjalanan.', 'MENIKMATI PERJALANAN'),
+    (2021, 2276, 'Perubahan besar dimulai dari keputusan sederhana:\nmemilih transportasi umum.', 'MULAI DARI PILIHAN KITA'),
+]
+for i, (a, b, caption, tag) in enumerate(subs):
+    bg = panel('Subtitle background ' + str(i), (0, -2.8, -8), (2.0, .64, .012), panelmat)
+    tx = text_obj(caption, 'Subtitle ' + str(i), (-1.72, -2.88, -7.98), .145, white_text)
+    tg = text_obj(tag, 'Chapter ' + str(i), (-1.70, -2.35, -7.98), .105, mint)
+    for ob in (bg, tx, tg):
+        ob.hide_render = True
+        ob.keyframe_insert(data_path='hide_render', frame=1)
+        ob.hide_render = False
+        ob.keyframe_insert(data_path='hide_render', frame=a)
+        ob.hide_render = True
+        ob.keyframe_insert(data_path='hide_render', frame=b + 1)
 
-# =====================================================
-# RESET AND RENDER SETUP
-# =====================================================
+# ---------- lighting and atmosphere ----------
+world = scene.world or bpy.data.worlds.new('Dusk city world')
+scene.world = world
+world.use_nodes = True
+world.node_tree.nodes['Background'].inputs[0].default_value = (.035, .055, .085, 1)
+world.node_tree.nodes['Background'].inputs[1].default_value = .55
 
-bpy.ops.object.select_all(action='SELECT')
-bpy.ops.object.delete(use_global=False)
+bpy.ops.object.light_add(type='AREA', location=(-3, -4, 25))
+key = bpy.context.object
+key.name = 'Large softbox key'
+key.data.energy = 5200
+key.data.shape = 'DISK'
+key.data.size = 18
+aim(key, (0, 0, 0))
 
-scene = bpy.context.scene
+bpy.ops.object.light_add(type='AREA', location=(13, 5, 14))
+rim = bpy.context.object
+rim.name = 'Cool architectural rim'
+rim.data.energy = 2600
+rim.data.color = (.42, .62, 1.0)
+rim.data.size = 12
+aim(rim, (0, 0, 3))
+if hasattr(rim.data, 'use_shadow'):
+    rim.data.use_shadow = False
 
-scene.render.engine = (
-    'BLENDER_EEVEE_NEXT'
-    if 'BLENDER_EEVEE_NEXT' in bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items.keys()
-    else 'BLENDER_EEVEE'
-)
+bpy.ops.object.light_add(type='AREA', location=(-12, -12, 10))
+fill = bpy.context.object
+fill.name = 'Warm street fill'
+fill.data.energy = 1900
+fill.data.color = (1.0, .63, .38)
+fill.data.size = 10
+aim(fill, (0, 0, 0))
+if hasattr(fill.data, 'use_shadow'):
+    fill.data.use_shadow = False
 
-# FAST RENDER SETTINGS
-# Override with environment variables when needed:
-# RENDER_SCALE=50 (half width/height), RENDER_SAMPLES=8
-# RENDER_TEST_FRAMES=20 renders only the first 20 frames for benchmarking.
-RENDER_SCALE = max(25, min(100, int(os.environ.get("RENDER_SCALE", "50"))))
-RENDER_SAMPLES = max(1, min(64, int(os.environ.get("RENDER_SAMPLES", "8"))))
-RENDER_TEST_FRAMES = int(os.environ.get("RENDER_TEST_FRAMES", "0"))
-
-if hasattr(scene, 'eevee') and hasattr(scene.eevee, 'taa_render_samples'):
-    scene.eevee.taa_render_samples = RENDER_SAMPLES
-
-scene.render.resolution_x = 1080
-scene.render.resolution_y = 1920
-scene.render.resolution_percentage = RENDER_SCALE
-scene.render.fps = 30
-scene.frame_start = 1
-scene.frame_end = min(2276, RENDER_TEST_FRAMES) if RENDER_TEST_FRAMES > 0 else 2276
-
-# Avoid unnecessary per-frame compositor work on the CPU-only GitHub runner.
-# The scene remains lit by its materials and lights; only the extra Fog Glow is skipped.
+# Blender 5 compositor API differs; disable compositing for this optimized render.
 scene.render.use_compositing = False
 
-# Render PNG sequence
-scene.render.image_settings.file_format = 'PNG'
+# ---------- voice-over ----------
+scene.sequence_editor_create()
+audio = os.path.join(ROOT, 'assets', 'voiceover.mp3')
+if os.path.exists(audio):
+    scene.sequence_editor.strips.new_sound('Original Indonesian voice-over', audio, channel=1, frame_start=1)
+
+# ---------- animation interpolation ----------
+# Guard action access because Blender 5 introduced newer layered Action structures.
+for ob in bpy.data.objects:
+    anim = ob.animation_data
+    action = anim.action if anim else None
+    if action and hasattr(action, 'fcurves'):
+        for fc in action.fcurves:
+            for kp in fc.keyframe_points:
+                kp.interpolation = 'BEZIER'
+
+# ---------- save and render ----------
 scene.render.image_settings.color_mode = 'RGB'
-scene.render.filepath = os.path.join(OUTPUT_DIR, "frame_")
+blend_path = os.path.join(ROOT, 'jakarta_whatif.blend')
+bpy.ops.wm.save_as_mainfile(filepath=blend_path)
 
-scene.view_settings.view_transform = 'AgX'
-# Compositing disabled above for faster CPU rendering.
+print('=== RENDER SETTINGS ===', flush=True)
+print('Blender:', bpy.app.version_string, flush=True)
+print('Resolution:', scene.render.resolution_x, scene.render.resolution_y,
+      scene.render.resolution_percentage, flush=True)
+print('Samples:', RENDER_SAMPLES, flush=True)
+print('Frames:', scene.frame_start, scene.frame_end, flush=True)
+print('Output:', scene.render.filepath, flush=True)
+print('Starting animation render...', flush=True)
 
-# =====================================================
-# MATERIALS
-# =====================================================
-
-def mat(name, color, metal=0, rough=.55, emission=0):
-    m = bpy.data.materials.new(name)
-    m.diffuse_color = (*color, 1)
-
-    # Blender creates shader nodes for new materials
-    nt = m.node_tree
-    p = nt.nodes.get('Principled BSDF')
-
-    if p:
-        p.inputs['Base Color'].default_value = (*color, 1)
-        p.inputs['Metallic'].default_value = metal
-        p.inputs['Roughness'].default_value = rough
-
-        if emission:
-            p.inputs['Emission Color'].default_value = (*color, 1)
-            p.inputs['Emission Strength'].default_value = emission
-
-    return m
-
-
-asphalt = mat('Road | textured charcoal', (.055, .068, .082), rough=.9)
-curb = mat('Sidewalk | warm stone', (.34, .34, .31))
-concrete = mat('Architecture | warm graphite', (.12, .16, .2))
-concrete2 = mat('Architecture | slate', (.19, .22, .24))
-glass = mat('Blue reflective glass', (.025, .105, .16), .45, .22)
-window_on = mat('Warm illuminated windows', (1, .64, .29), .15, .3, 1.4)
-window_cool = mat('Cool illuminated windows', (.35, .64, .82), .15, .25, .65)
-lane = mat('Road markings', (.88, .84, .7), rough=.5)
-green = mat('Median grass', (.12, .29, .16))
-leaf = mat('Tree foliage', (.14, .34, .2))
-leaf2 = mat('Tree foliage highlights', (.23, .43, .24))
-bark = mat('Tree bark', (.19, .105, .065))
-red = mat('Car | crimson', (.62, .075, .055), .25, .28)
-blue = mat('Car | midnight blue', (.045, .15, .34), .35, .25)
+bpy.ops.render.render(animation=True)
+print('=== BLENDER RENDER COMPLETED ===', flush=True)
