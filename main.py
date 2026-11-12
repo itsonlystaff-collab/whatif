@@ -204,7 +204,6 @@ scene.sequence_editor_create(); audio=os.path.join(ROOT,'assets','voiceover.mp3'
 if os.path.exists(audio): scene.sequence_editor.strips.new_sound('Original Indonesian voice-over',audio,channel=1,frame_start=1)
 # linear camera and object motion; smooth ease
 for ob in bpy.data.objects:
-    if ob.animation_data and ob.animation_data.action:
 # Blender 5.0.1 compatible interpolation
 for ob in bpy.data.objects:
     if ob.animation_data and ob.animation_data.action:
