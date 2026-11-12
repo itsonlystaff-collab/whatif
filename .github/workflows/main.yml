@@ -1,12 +1,34 @@
 name: Render Jakarta What If
 on:
   workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
 jobs:
   render:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
+      - name: Locate project folder
+        id: project
+        shell: bash
+        run: |
+          if [ -f main.py ]; then
+            PROJECT_DIR="."
+          elif [ -f jakarta_whatif_github/main.py ]; then
+            PROJECT_DIR="jakarta_whatif_github"
+          else
+            PROJECT_FILE="$(find . -type f -name main.py -not -path '*/.git/*' | head -n 1)"
+            if [ -z "$PROJECT_FILE" ]; then
+              echo "ERROR: main.py tidak ditemukan. Upload isi folder proyek ke repository." >&2
+              find . -maxdepth 4 -type f | sort
+              exit 1
+            fi
+            PROJECT_DIR="$(dirname "$PROJECT_FILE")"
+          fi
+          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "Project directory: $PROJECT_DIR"
       - name: Install Blender and FFmpeg
         run: |
           sudo apt-get update
@@ -14,7 +36,22 @@ jobs:
       - name: Show Blender version
         run: blender --version
       - name: Render video
-        run: blender -b -t 4 -P main.py
+        shell: bash
+        run: |
+          PROJECT_DIR="${{ steps.project.outputs.dir }}"
+          cd "$PROJECT_DIR"
+          mkdir -p output
+          blender -b -t 4 -P main.py 2>&1 | tee render.log
+          test -s output/jakarta_whatif.mp4 || {
+            echo "ERROR: Blender selesai tetapi MP4 tidak ditemukan di $PROJECT_DIR/output/"
+            find . -maxdepth 4 -type f -printf '%p (%s bytes)\\n' | sort
+            exit 1
+          }
+          mkdir -p "$GITHUB_WORKSPACE/output"
+          cp output/jakarta_whatif.mp4 "$GITHUB_WORKSPACE/output/jakarta_whatif.mp4"
+          if [ -f jakarta_whatif.blend ]; then
+            cp jakarta_whatif.blend "$GITHUB_WORKSPACE/jakarta_whatif.blend"
+          fi
       - name: Upload rendered MP4 and Blender scene
         uses: actions/upload-artifact@v4
         with:
