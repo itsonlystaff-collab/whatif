@@ -1,0 +1,37 @@
+name: Render Jakarta What If
+on:
+  workflow_dispatch:
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Blender and FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender ffmpeg
+      - name: Show Blender version
+        run: |
+          blender --version
+          ffmpeg -version | head -n 2
+      - name: Render PNG frames with Blender
+        run: blender -b -t 4 -P main.py
+      - name: Encode MP4 and add voice-over
+        run: |
+          test -f assets/voiceover.mp3
+          test -f output/frames/frame_0001.png
+          ffmpeg -y -framerate 30 -start_number 1 -i output/frames/frame_%04d.png \
+            -i assets/voiceover.mp3 -map 0:v:0 -map 1:a:0 \
+            -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p \
+            -c:a aac -b:a 192k -shortest -movflags +faststart \
+            output/jakarta_whatif.mp4
+          test -s output/jakarta_whatif.mp4
+      - name: Upload rendered MP4 and Blender scene
+        uses: actions/upload-artifact@v4
+        with:
+          name: jakarta-whatif-video
+          path: |
+            output/jakarta_whatif.mp4
+            jakarta_whatif.blend
+          if-no-files-found: error
