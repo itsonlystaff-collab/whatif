@@ -123,6 +123,24 @@ jobs:
 
           echo "=== BLENDER RENDER FINISHED ==="
 
+      # 6A. Diagnose render output
+      - name: Diagnose Blender render output
+        if: always()
+        shell: bash
+        run: |
+          echo "=== BLENDER RENDER LOG ==="
+          if [ -f output/blender-render.log ]; then
+            tail -n 150 output/blender-render.log
+          else
+            echo "Blender log tidak ditemukan"
+          fi
+
+          echo "=== OUTPUT DIRECTORY ==="
+          find output -maxdepth 3 -type f -printf '%p (%s bytes)\n' | head -n 100
+
+          echo "=== PNG FRAME COUNT ==="
+          find . -type f -name '*.png' | wc -l
+
       # 7. Verify all frames
       - name: Verify rendered PNG frames
         shell: bash
@@ -220,6 +238,18 @@ jobs:
             output/blender-render.log
             main.py
             assets/voiceover.mp3
+            
+      # 10. Always upload diagnostic logs
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jakarta-whatif-diagnostics
+          path: |
+            output/blender-render.log
+          if-no-files-found: warn
+          retention-days: 7
+
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
