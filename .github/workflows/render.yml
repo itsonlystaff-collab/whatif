@@ -1,4 +1,4 @@
-
+```yaml
 name: Render Jakarta What If
 
 on:
@@ -115,6 +115,9 @@ jobs:
           echo "=== START BLENDER RENDER ==="
           echo "Blender version: $BLENDER_VERSION"
           echo "Expected frames: $EXPECTED_FRAMES"
+          echo "Test frames: $RENDER_TEST_FRAMES"
+          echo "Render scale: $RENDER_SCALE%"
+          echo "Render samples: $RENDER_SAMPLES"
 
           blender \
             --background \
@@ -132,6 +135,7 @@ jobs:
         shell: bash
         run: |
           echo "=== BLENDER RENDER LOG ==="
+
           if [ -f output/blender-render.log ]; then
             tail -n 150 output/blender-render.log
           else
@@ -139,10 +143,15 @@ jobs:
           fi
 
           echo "=== OUTPUT DIRECTORY ==="
-          find output -maxdepth 3 -type f -printf '%p (%s bytes)\n' | head -n 100
+          find output -maxdepth 3 -type f \
+            -printf '%p (%s bytes)\n' | head -n 100
+
+          echo "=== FRAME DIRECTORY ==="
+          ls -lah output/frames/ || true
 
           echo "=== PNG FRAME COUNT ==="
-          find . -type f -name '*.png' | wc -l
+          find output/frames -maxdepth 1 \
+            -type f -name 'frame_*.png' | wc -l
 
       # 7. Verify all frames
       - name: Verify rendered PNG frames
@@ -231,7 +240,6 @@ jobs:
 
           echo "MP4 BERHASIL DIBUAT!"
 
-    
       # 9. Upload video and diagnostic log
       - name: Upload final video and render log
         if: always()
@@ -246,6 +254,4 @@ jobs:
           if-no-files-found: warn
           compression-level: 0
           retention-days: 7
-
-            
-  
+```
