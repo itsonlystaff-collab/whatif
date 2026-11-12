@@ -1,37 +1,172 @@
 name: Render Jakarta What If
+
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
 jobs:
   render:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 120
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Install Blender and FFmpeg
+      # 1. Download repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Install dependencies
+      - name: Install Blender dependencies and FFmpeg
         run: |
           sudo apt-get update
-          sudo apt-get install -y blender ffmpeg
-      - name: Show Blender version
+          sudo apt-get install -y \
+            ffmpeg \
+            curl \
+            xz-utils \
+            libx11-6 \
+            libxxf86vm1 \
+            libxfixes3 \
+            libxi6 \
+            libxrender1 \
+            libxkbcommon0 \
+            libsm6 \
+            libice6 \
+            libgl1 \
+            libegl1 \
+            libglib2.0-0 \
+            libgomp1
+
+      # 3. Install Blender 5.0.1
+      - name: Install Blender 5.0.1
+        run: |
+          cd /tmp
+
+          curl -fL \
+            https://download.blender.org/release/Blender5.0/blender-5.0.1-linux-x64.tar.xz \
+            -o blender.tar.xz
+
+          tar -xf blender.tar.xz
+
+          echo "/tmp/blender-5.0.1-linux-x64" >> $GITHUB_PATH
+
+      # 4. Verify Blender and FFmpeg
+      - name: Show Blender and FFmpeg versions
         run: |
           blender --version
-          ffmpeg -version | head -n 2
-      - name: Render PNG frames with Blender
-        run: blender -b -t 4 -P main.py
-      - name: Encode MP4 and add voice-over
+          ffmpeg -version
+          ffprobe -version
+
+      # 5. Check project files
+      - name: Check project files
         run: |
-          test -f assets/voiceover.mp3
-          test -f output/frames/frame_0001.png
-          ffmpeg -y -framerate 30 -start_number 1 -i output/frames/frame_%04d.png \
-            -i assets/voiceover.mp3 -map 0:v:0 -map 1:a:0 \
-            -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p \
-            -c:a aac -b:a 192k -shortest -movflags +faststart \
+          echo "=== PROJECT DIRECTORY ==="
+          ls -lah
+
+          echo "=== ASSETS ==="
+          ls -lah assets/
+
+          test -f main.py || {
+            echo "ERROR: main.py tidak ditemukan"
+            exit 1
+          }
+
+          test -s assets/voiceover.mp3 || {
+            echo "ERROR: voiceover.mp3 tidak ditemukan atau kosong"
+            exit 1
+          }
+
+          mkdir -p output/frames
+
+      # 6. Render PNG with Blender
+      - name: Render PNG frames with Blender
+        run: |
+          blender \
+            --background \
+            --python-exit-code 1 \
+            --python main.py
+
+      # 7. Check rendered frames
+      - name: Verify rendered PNG frames
+        run: |
+          echo "=== CHECK FRAMES ==="
+
+          find output/frames \
+            -maxdepth 1 \
+            -type f \
+            -name '*.png' \
+            | sort | head -20
+
+          FRAME_COUNT=$(find output/frames \
+            -maxdepth 1 \
+            -type f \
+            -name 'frame_*.png' | wc -l)
+
+          echo "Total frames: $FRAME_COUNT"
+
+          if [ "$FRAME_COUNT" -eq 0 ]; then
+            echo "ERROR: Tidak ada PNG frames!"
+            exit 1
+          fi
+
+          if [ ! -f output/frames/frame_0001.png ]; then
+            echo "ERROR: frame_0001.png tidak ditemukan!"
+            exit 1
+          fi
+
+      # 8. Encode MP4 and add voice-over
+      - name: Encode MP4 and add voice-over
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=== CHECK INPUT FILES ==="
+
+          test -s assets/voiceover.mp3
+          test -s output/frames/frame_0001.png
+
+          echo "=== ENCODING MP4 ==="
+
+          ffmpeg -y \
+            -framerate 30 \
+            -start_number 1 \
+            -i output/frames/frame_%04d.png \
+            -i assets/voiceover.mp3 \
+            -map 0:v:0 \
+            -map 1:a:0 \
+            -c:v libx264 \
+            -preset medium \
+            -crf 18 \
+            -pix_fmt yuv420p \
+            -c:a aac \
+            -b:a 192k \
+            -shortest \
+            -movflags +faststart \
             output/jakarta_whatif.mp4
+
+          echo "=== VERIFY MP4 ==="
+
           test -s output/jakarta_whatif.mp4
+
+          ffprobe -v error \
+            -show_entries format=duration \
+            -of default=noprint_wrappers=1 \
+            output/jakarta_whatif.mp4
+
+          echo "MP4 BERHASIL DIBUAT!"
+
+      # 9. Upload final video and Blender project
       - name: Upload rendered MP4 and Blender scene
         uses: actions/upload-artifact@v4
         with:
           name: jakarta-whatif-video
           path: |
             output/jakarta_whatif.mp4
-            jakarta_whatif.blend
+            output/frames/
+            main.py
+            assets/voiceover.mp3
           if-no-files-found: error
+          retention-days: 7
