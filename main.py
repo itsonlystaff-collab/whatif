@@ -197,7 +197,8 @@ bpy.ops.object.light_add(type='AREA',location=(-3,-4,25)); key=bpy.context.objec
 bpy.ops.object.light_add(type='AREA',location=(13,5,14)); rim=bpy.context.object; rim.name='Cool architectural rim'; rim.data.energy=2600; rim.data.color=(.42,.62,1.0); rim.data.size=12; aim(rim,(0,0,3))
 bpy.ops.object.light_add(type='AREA',location=(-12,-12,10)); fill=bpy.context.object; fill.name='Warm street fill'; fill.data.energy=1900; fill.data.color=(1.0,.63,.38); fill.data.size=10; aim(fill,(0,0,0))
 # subtle compositor glow for lamps and highlights
-scene.use_nodes=True; nt=scene.node_tree; nt.nodes.clear(); rl=nt.nodes.new('CompositorNodeRLayers'); glare=nt.nodes.new('CompositorNodeGlare'); glare.glare_type='FOG_GLOW'; glare.quality='MEDIUM'; glare.threshold=1.5; comp=nt.nodes.new('CompositorNodeComposite'); nt.links.new(rl.outputs['Image'],glare.inputs['Image']); nt.links.new(glare.outputs['Image'],comp.inputs['Image'])
+# Blender 5.0.1: nonaktifkan compositor untuk menghindari error node_tree
+scene.render.use_compositing = False
 # audio
 scene.sequence_editor_create(); audio=os.path.join(ROOT,'assets','voiceover.mp3')
 if os.path.exists(audio): scene.sequence_editor.strips.new_sound('Original Indonesian voice-over',audio,channel=1,frame_start=1)
